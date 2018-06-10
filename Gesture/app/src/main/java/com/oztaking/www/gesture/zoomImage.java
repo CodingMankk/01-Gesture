@@ -2,6 +2,7 @@ package com.oztaking.www.gesture;
 
 import android.content.Context;
 import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.AppCompatImageView;
@@ -69,9 +70,14 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
                 scaleFactor = SCALE_MAX / scale;
             }
 
-            //            设置缩放比例
-
-            mScaleMatrix.postScale(scaleFactor, scaleFactor, getWidth() / 2, getHeight() / 2);
+            // 设置缩放比例
+            //以屏幕的中心进行缩放
+            //            mScaleMatrix.postScale(scaleFactor, scaleFactor, getWidth() / 2,
+            // getHeight() / 2);
+            //以获得焦点的位置进行缩放
+            mScaleMatrix.postScale(scaleFactor, scaleFactor, detector.getFocusX(), detector
+                    .getFocusY());
+            checkBorderAndCenterWhenScale();
             setImageMatrix(mScaleMatrix);
 
         }
@@ -157,6 +163,60 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
             once = false;
 
         }
+    }
+
+    //在缩放时，进行图片显示范围的控制
+
+    public void checkBorderAndCenterWhenScale() {
+        RectF rectF = getMatrixRectF();
+        float deltaX = 0;
+        float deltaY = 0;
+
+        int width = getWidth();
+        int height = getHeight();
+
+        //如果图片的缩放时的宽高大于屏幕，则控制范围
+        if (rectF.width() >= width) {
+            if (rectF.left > 0) {
+                deltaX = -rectF.left;
+            }
+
+            if (rectF.right < width) {
+                deltaX = width - rectF.right;
+            }
+        }
+
+        if (rectF.height() > height) {
+            if (rectF.top > 0) {
+                deltaY = -rectF.top;
+            }
+            if (rectF.bottom < height) {
+                deltaY = height - rectF.bottom;
+            }
+        }
+        //如果图片的缩放时的宽高小于屏幕，则让其居中
+        if (rectF.width() < width) {
+            deltaX = width * 0.5f - rectF.right + rectF.width() * 0.5f;
+        }
+
+        if (rectF.height() < height) {
+            deltaY = height * 0.5f - rectF.bottom + rectF.height() * 0.5f;
+        }
+
+        mScaleMatrix.postTranslate(deltaX, deltaY);
+
+    }
+
+    //根据当前图片的Matrix获得图片的范围
+    private RectF getMatrixRectF() {
+        Matrix matrix = mScaleMatrix;
+        RectF rectF = new RectF();
+        Drawable d = getDrawable();
+        if (d != null) {
+            rectF.set(0, 0, d.getIntrinsicWidth(), d.getIntrinsicHeight());
+            matrix.mapRect(rectF);
+        }
+        return rectF;
     }
 
 }

@@ -8,19 +8,19 @@
     android:layout_height="match_parent"
     tools:context="com.oztaking.www.gesture.MainActivity">
 
+    <!--<com.oztaking.www.gesture.zoomImage-->
+        <!--android:layout_width="match_parent"-->
+        <!--android:layout_height="match_parent"-->
+        <!--android:scaleType="matrix"-->
+        <!--android:src="@drawable/ttt"-->
+
+        <!--&gt;-->
+    <!--</com.oztaking.www.gesture.zoomImage>-->
+
+
     <com.oztaking.www.gesture.zoomImage
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:scaleType="matrix"
-        android:src="@drawable/ttt"
-
-        >
-    </com.oztaking.www.gesture.zoomImage>
-
-
-    <com.oztaking.www.gesture.zoomImage
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:scaleType="matrix"
         android:src="@drawable/xx">
     </com.oztaking.www.gesture.zoomImage>
