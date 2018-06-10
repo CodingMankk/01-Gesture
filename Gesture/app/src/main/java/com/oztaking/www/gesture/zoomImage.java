@@ -29,6 +29,16 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
     private ScaleGestureDetector mScaleGestureDetetor = null;
     private final Matrix mScaleMatrix = new Matrix();
 
+    private int mTouchSlop;
+
+    private int lastPointCount;
+    private boolean isCanDrag = false;
+    private float mLastX = 0;
+    private float mLastY = 0;
+
+    private boolean isCheckLeftAndRight = true;
+    private boolean isCheckTopAndBottom = true;
+
 
     private boolean once = true;
 
@@ -102,6 +112,17 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
 
     /**
      * OnTouchListener的MotionEvent交给ScaleGestureDetector进行处理
+     * <p>
+     * 首先我们拿到触摸点的数量，然后求出多个触摸点的平均值，
+     * 设置给我们的mLastX , mLastY ， 然后在移动的时候，得到dx ,dy
+     * 进行范围检查以后，调用mScaleMatrix.postTranslate进行设置偏移量，
+     * 当然了，设置完成以后，还需要再次校验一下，不能把图片移动的与屏幕边界出现白边，
+     * 校验完成后，调用setImageMatrix.
+     * 这里：需要注意一下，我们没有复写ACTION_DOWM，是因为，
+     * ACTION_DOWN在多点触控的情况下，只要有一个手指按下状态，
+     * 其他手指按下不会再次触发ACTION_DOWN，但是多个手指以后，
+     * 触摸点的平均值会发生很大变化，所以我们没有用到ACTION_DOWN。
+     * 每当触摸点的数量变化，我们就会更新当前的mLastX,mLastY.
      *
      * @param v
      * @param event
@@ -109,8 +130,79 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
      */
     @Override
     public boolean onTouch(View v, MotionEvent event) {
-        return mScaleGestureDetetor.onTouchEvent(event);
+
+        mScaleGestureDetetor.onTouchEvent(event);
+
+        float x = 0, y = 0;
+        //取到触摸点的个数；
+        final int pointCount = event.getPointerCount();
+        //取到多个触摸点的x与y均值；
+        for (int i = 0; i < pointCount; i++) {
+            x += event.getX(i);
+            y += event.getY(i);
+
+        }
+
+        x = x / pointCount;
+        y = y / pointCount;
+
+        //每当触摸点发生变化的时候，重置mLastX,重置mLastY；
+        if (pointCount != lastPointCount) {
+            isCanDrag = false;
+            mLastX = x;
+            mLastY = y;
+        }
+
+        lastPointCount = pointCount;
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_MOVE:
+                float dx = x - mLastX;
+                float dy = y - mLastY;
+
+                if (!isCanDrag) {
+                    isCanDrag = isCanDrag(dx, dy);
+                }
+                if (isCanDrag) {
+                    RectF rectF = getMatrixRectF();
+                    if (getDrawable() != null) {
+                        isCheckLeftAndRight = true;
+                        isCheckTopAndBottom = true;
+
+                        //如果宽高小于屏幕宽度，则禁止左右移动；
+                        if (rectF.width() < getWidth()) {
+                            dx = 0;
+                            isCheckLeftAndRight = false;
+                        }
+                        //如果高度小于屏幕高度，则禁止上下移动
+                        if (rectF.height() < getHeight()) {
+                            dy = 0;
+                            isCheckTopAndBottom = false;
+                        }
+
+                        mScaleMatrix.postTranslate(dx, dy);
+                        //再次检验，不能将图片移动与屏幕边界出现白边；
+                        checkMatrixBounds();
+                        setImageMatrix(mScaleMatrix);
+                    }
+                }
+
+                mLastX = x;
+                mLastY = y;
+
+                break;
+
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                lastPointCount = 0;
+                break;
+            default:
+                break;
+        }
+
+
+        return true;
     }
+
 
     @Override
     protected void onAttachedToWindow() {
@@ -151,15 +243,17 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
             if (dh > height && dh <= width) {
                 scale = height * 1.0f / dh;
             }
-
+            // 如果宽和高都大于屏幕，则让其按按比例适应屏幕大小
             if (dw > width && dh > height) {
-                scale = Math.min(dw * 1.0f / width, dh * 1.0f / height);
+                scale = Math.min(width * 1.0f /dw,  height * 1.0f / dh);
             }
 
             initScale = scale;
             //图片移到屏幕中心
             mScaleMatrix.postTranslate((width - dw) / 2, (height - dh) / 2);
             mScaleMatrix.postScale(scale, scale, getWidth() / 2, getHeight() / 2);
+
+            setImageMatrix(mScaleMatrix);
             once = false;
 
         }
@@ -217,6 +311,39 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
             matrix.mapRect(rectF);
         }
         return rectF;
+    }
+
+    private void checkMatrixBounds() {
+        RectF rectF = getMatrixRectF();
+
+        float deltaX = 0, deltaY = 0;
+//        获取屏幕的宽高；
+        final float viewWidth = getWidth();
+        final float viewHeight = getHeight();
+
+//        判断移动或者缩放后，图片显示是否超出屏幕边界；
+        if (rectF.top > 0 && isCheckTopAndBottom){
+            deltaY = -rectF.top;
+        }
+
+        if (rectF.bottom < viewHeight && isCheckTopAndBottom){
+            deltaY = viewHeight - rectF.bottom;
+        }
+
+        if (rectF.left > 0 && isCheckLeftAndRight){
+            deltaX = -rectF.left;
+        }
+
+        if (rectF.right < viewWidth && isCheckLeftAndRight){
+            deltaX = viewWidth -rectF.right;
+        }
+
+        mScaleMatrix.postTranslate(deltaX,deltaY);
+
+    }
+
+    private boolean isCanDrag(float dx, float dy){
+        return Math.sqrt((dx * dx) + (dy * dy)) >= mTouchSlop;
     }
 
 }
