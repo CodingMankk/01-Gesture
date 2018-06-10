@@ -19,7 +19,7 @@ import android.widget.Toast;
  * @function:
  */
 
-public class zoomImage extends AppCompatImageView implements ScaleGestureDetector
+public class ZoomImage extends AppCompatImageView implements ScaleGestureDetector
         .OnScaleGestureListener,
         View.OnTouchListener, OnGlobalLayoutListener {
 
@@ -54,11 +54,11 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
     private boolean once = true;
 
 
-    public zoomImage(Context context) {
+    public ZoomImage(Context context) {
         this(context, null);
     }
 
-    public zoomImage(Context context, @Nullable AttributeSet attrs) {
+    public ZoomImage(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
 
 
@@ -87,13 +87,16 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
 
                 //如果当然是scale小于2，则通过view.发送一个Runnable进行执行；其他类似；
                 if (getScale() < SCALE_MID) {
-                    zoomImage.this.postDelayed(new AutoScaleRunnable(SCALE_MID, x, y), 16);
+                    ZoomImage.this.postDelayed(new AutoScaleRunnable(SCALE_MID, x, y), 16);
                     isAutoScale = true;
-                } else if (getScale() >= SCALE_MID && getScale() < SCALE_MAX) {
-                    zoomImage.this.postDelayed(new AutoScaleRunnable(SCALE_MAX, x, y), 16);
-                    isAutoScale = true;
-                } else {
-                    zoomImage.this.postDelayed(new AutoScaleRunnable(initScale, x, y), 16);
+                }
+//                else if (getScale() >= SCALE_MID && getScale() < SCALE_MAX) {
+//                    ZoomImage.this.postDelayed(new AutoScaleRunnable(SCALE_MAX, x, y), 16);
+//                    isAutoScale = true;
+//                }
+
+                else {
+                    ZoomImage.this.postDelayed(new AutoScaleRunnable(initScale, x, y), 16);
                     isAutoScale = true;
                 }
 
@@ -188,7 +191,7 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
     @Override
     public boolean onTouch(View v, MotionEvent event) {
         //将双击事件传递过来；
-        if (mGestureDetector.onTouchEvent(event)){
+        if (mGestureDetector.onTouchEvent(event)) {
             return true;
         }
 
@@ -215,8 +218,17 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
         }
 
         lastPointCount = pointCount;
+        RectF rectF = getMatrixRectF();
         switch (event.getAction()) {
+
             case MotionEvent.ACTION_MOVE:
+                //当宽或高大于屏幕宽或高时，拖动效果认为是移动图片，反之则让ViewPager去处理
+                if (rectF.width() > getWidth() || rectF.height() > getHeight()) {
+                    //解决viewPager的滑动冲突；
+                    getParent().requestDisallowInterceptTouchEvent(true);
+
+                }
+
                 float dx = x - mLastX;
                 float dy = y - mLastY;
 
@@ -224,8 +236,20 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
                     isCanDrag = isCanDrag(dx, dy);
                 }
                 if (isCanDrag) {
-                    RectF rectF = getMatrixRectF();
+
                     if (getDrawable() != null) {
+
+                        //判断当前已经到达边界，且还在拉的时候，事件交给ViewPager
+                        if (getMatrixRectF().left == 0 && dx > 0)
+                        {
+                            getParent().requestDisallowInterceptTouchEvent(false);
+                        }
+                        //判断当前已经到达边界，且还在拉的时候，事件交给ViewPager
+                        if (getMatrixRectF().right == getWidth() && dx < 0)
+                        {
+                            getParent().requestDisallowInterceptTouchEvent(false);
+                        }
+
                         isCheckLeftAndRight = true;
                         isCheckTopAndBottom = true;
 
@@ -256,6 +280,15 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
             case MotionEvent.ACTION_CANCEL:
                 lastPointCount = 0;
                 break;
+            case MotionEvent.ACTION_DOWN:
+                //当宽或高大于屏幕宽或高时，拖动效果认为是移动图片，反之则让ViewPager去处理
+                if (rectF.width() > getWidth() || rectF.height() > getHeight()) {
+                    //解决viewPager的滑动冲突；
+                    getParent().requestDisallowInterceptTouchEvent(true);
+
+                }
+                break;
+
             default:
                 break;
         }
@@ -436,19 +469,20 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
         @Override
         public void run() {
             //执行缩放操作；
-            mScaleMatrix.postScale(mTempScale,mTempScale,x,y);
+            mScaleMatrix.postScale(mTempScale, mTempScale, x, y);
             checkBorderAndCenterWhenScale();
             setImageMatrix(mScaleMatrix);
 
-            final  float currentScale = getScale();
+            final float currentScale = getScale();
             //如果在合法范围内继续缩放；
             if (((mTempScale > 1.0f) && (currentScale < mTargetScale))
-                    ||( (mTargetScale < 1.0f) && (mTargetScale < currentScale))){
-                zoomImage.this.postDelayed(this,16);
-            }else { //设置为目标的缩放比例
-                final float deltaScale = mTargetScale /currentScale;
-                Toast.makeText(getContext(),"deltaScale:mTargetScale:currentScale"+ deltaScale+":"+ mTargetScale +":"+ mTargetScale,Toast.LENGTH_SHORT).show();
-                mScaleMatrix.postScale(deltaScale,deltaScale,x,y);
+                    || ((mTargetScale < 1.0f) && (mTargetScale < currentScale))) {
+                ZoomImage.this.postDelayed(this, 16);
+            } else { //设置为目标的缩放比例
+                final float deltaScale = mTargetScale / currentScale;
+                Toast.makeText(getContext(), "deltaScale:mTargetScale:currentScale" + deltaScale
+                        + ":" + mTargetScale + ":" + mTargetScale, Toast.LENGTH_SHORT).show();
+                mScaleMatrix.postScale(deltaScale, deltaScale, x, y);
                 checkBorderAndCenterWhenScale();
                 setImageMatrix(mScaleMatrix);
                 isAutoScale = false;
