@@ -7,10 +7,13 @@ import android.graphics.drawable.Drawable;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.AppCompatImageView;
 import android.util.AttributeSet;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
+import android.widget.Toast;
 
 /**
  * @function:
@@ -21,12 +24,19 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
         View.OnTouchListener, OnGlobalLayoutListener {
 
     private static final float SCALE_MAX = 4.0f; //??
+    private static final float SCALE_MID = 2.0f; //??
+
+
     //    初始化时的缩放比例，如果图片宽或高大于屏幕，此值将小于0
     private float initScale = 1.0f;
     //    存放矩阵的9个值
     private final float[] matrixValues = new float[9];
     //缩放的手势检测
     private ScaleGestureDetector mScaleGestureDetetor = null;
+    //双击手势监测
+    private GestureDetector mGestureDetector = null;
+
+
     private final Matrix mScaleMatrix = new Matrix();
 
     private int mTouchSlop;
@@ -38,6 +48,7 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
 
     private boolean isCheckLeftAndRight = true;
     private boolean isCheckTopAndBottom = true;
+    private boolean isAutoScale = false;
 
 
     private boolean once = true;
@@ -49,7 +60,53 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
 
     public zoomImage(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
+
+
+        mGestureDetector = new GestureDetector(context, new GestureDetector
+                .SimpleOnGestureListener() {
+
+            /**
+             * 双击尺寸的变化规则：
+             * 根据当前的缩放值，如果是小于2的，我们双击直接到变为原图的2倍；
+             * 如果是2,4之间的，我们双击直接为原图的4倍；其他状态也就是4倍，
+             * 双击后还原到最初的尺寸
+             * [说明]双击之后需要一个动画，否则给用户的感觉太突兀，因此创建了一个新类：
+             * AutoScaleRunnable：专门处理双击的缩放事件；
+             * @param e
+             * @return
+             */
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                //当双击的时候，首先判断是否正在自动缩放，如果在，直接retrun ;
+                if (isAutoScale == true) {
+                    return true;
+                }
+
+                float x = e.getX();
+                float y = e.getY();
+
+                //如果当然是scale小于2，则通过view.发送一个Runnable进行执行；其他类似；
+                if (getScale() < SCALE_MID) {
+                    zoomImage.this.postDelayed(new AutoScaleRunnable(SCALE_MID, x, y), 16);
+                    isAutoScale = true;
+                } else if (getScale() >= SCALE_MID && getScale() < SCALE_MAX) {
+                    zoomImage.this.postDelayed(new AutoScaleRunnable(SCALE_MAX, x, y), 16);
+                    isAutoScale = true;
+                } else {
+                    zoomImage.this.postDelayed(new AutoScaleRunnable(initScale, x, y), 16);
+                    isAutoScale = true;
+                }
+
+                return true;
+            }
+        });
+
+        // 自定义View处理touch事件的时候，有的时候需要判断用户是否真的存在movie，
+        // 系统提供了这样的方法。表示滑动的时候，手的移动要大于这个返回的距离值才开始移动控件。
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+
         super.setScaleType(ScaleType.MATRIX);
+
         mScaleGestureDetetor = new ScaleGestureDetector(context, this);
         this.setOnTouchListener(this);
     }
@@ -95,7 +152,7 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
         return true;
     }
 
-    private float getScale() {
+    public float getScale() {
         mScaleMatrix.getValues(matrixValues);
         return matrixValues[Matrix.MSCALE_X];
     }
@@ -130,6 +187,10 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
      */
     @Override
     public boolean onTouch(View v, MotionEvent event) {
+        //将双击事件传递过来；
+        if (mGestureDetector.onTouchEvent(event)){
+            return true;
+        }
 
         mScaleGestureDetetor.onTouchEvent(event);
 
@@ -245,7 +306,7 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
             }
             // 如果宽和高都大于屏幕，则让其按按比例适应屏幕大小
             if (dw > width && dh > height) {
-                scale = Math.min(width * 1.0f /dw,  height * 1.0f / dh);
+                scale = Math.min(width * 1.0f / dw, height * 1.0f / dh);
             }
 
             initScale = scale;
@@ -317,33 +378,82 @@ public class zoomImage extends AppCompatImageView implements ScaleGestureDetecto
         RectF rectF = getMatrixRectF();
 
         float deltaX = 0, deltaY = 0;
-//        获取屏幕的宽高；
+        //        获取屏幕的宽高；
         final float viewWidth = getWidth();
         final float viewHeight = getHeight();
 
-//        判断移动或者缩放后，图片显示是否超出屏幕边界；
-        if (rectF.top > 0 && isCheckTopAndBottom){
+        //        判断移动或者缩放后，图片显示是否超出屏幕边界；
+        if (rectF.top > 0 && isCheckTopAndBottom) {
             deltaY = -rectF.top;
         }
 
-        if (rectF.bottom < viewHeight && isCheckTopAndBottom){
+        if (rectF.bottom < viewHeight && isCheckTopAndBottom) {
             deltaY = viewHeight - rectF.bottom;
         }
 
-        if (rectF.left > 0 && isCheckLeftAndRight){
+        if (rectF.left > 0 && isCheckLeftAndRight) {
             deltaX = -rectF.left;
         }
 
-        if (rectF.right < viewWidth && isCheckLeftAndRight){
-            deltaX = viewWidth -rectF.right;
+        if (rectF.right < viewWidth && isCheckLeftAndRight) {
+            deltaX = viewWidth - rectF.right;
         }
 
-        mScaleMatrix.postTranslate(deltaX,deltaY);
+        mScaleMatrix.postTranslate(deltaX, deltaY);
 
     }
 
-    private boolean isCanDrag(float dx, float dy){
+    private boolean isCanDrag(float dx, float dy) {
         return Math.sqrt((dx * dx) + (dy * dy)) >= mTouchSlop;
     }
 
+
+    private class AutoScaleRunnable implements Runnable {
+
+
+        private float mTargetScale;
+        private float mTempScale;
+        private float BIGGER = 1.07f;
+        private float SMALLER = 0.93f;
+
+        //缩放的中心
+        private float x;
+        private float y;
+
+
+        public AutoScaleRunnable(float targetScale, float x, float y) {
+            this.mTargetScale = targetScale;
+            this.x = x;
+            this.y = y;
+            if (getScale() < mTargetScale) {
+                mTempScale = BIGGER;
+            } else {
+                mTempScale = SMALLER;
+            }
+        }
+
+
+        @Override
+        public void run() {
+            //执行缩放操作；
+            mScaleMatrix.postScale(mTempScale,mTempScale,x,y);
+            checkBorderAndCenterWhenScale();
+            setImageMatrix(mScaleMatrix);
+
+            final  float currentScale = getScale();
+            //如果在合法范围内继续缩放；
+            if (((mTempScale > 1.0f) && (currentScale < mTargetScale))
+                    ||( (mTargetScale < 1.0f) && (mTargetScale < currentScale))){
+                zoomImage.this.postDelayed(this,16);
+            }else { //设置为目标的缩放比例
+                final float deltaScale = mTargetScale /currentScale;
+                Toast.makeText(getContext(),"deltaScale:mTargetScale:currentScale"+ deltaScale+":"+ mTargetScale +":"+ mTargetScale,Toast.LENGTH_SHORT).show();
+                mScaleMatrix.postScale(deltaScale,deltaScale,x,y);
+                checkBorderAndCenterWhenScale();
+                setImageMatrix(mScaleMatrix);
+                isAutoScale = false;
+            }
+
+        }
+    }
 }
